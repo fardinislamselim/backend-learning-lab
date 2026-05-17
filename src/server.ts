@@ -1,19 +1,20 @@
-import { config } from "dotenv";
+// import { config } from "dotenv";
 import express, {
   type Application,
   type Request,
   type Response,
 } from "express";
-import pg, { Pool } from "pg";
+import { Pool } from "pg";
+import config from "./config";
 
-config();
+
 
 const app: Application = express();
-const port = 5000;
+const port = config.port || 8000;
 
 app.use(express.json());
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: config.connectionString });
 
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({ message: "Hello World!" });
@@ -54,8 +55,124 @@ app.post("/", async (req: Request, res: Response) => {
       message: "Created!",
       data: result.rows[0],
     });
-  } catch (error:any) {
+  } catch (error: any) {
     res.status(500).json({
+      message: error.message,
+      error: error,
+    });
+  }
+});
+
+app.get("/api/users", async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(`SELECT * FROM users`);
+    res.status(200).json({
+      message: "Users retrived successfully!",
+      data: result.rows,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      message: error.message,
+      error: error,
+    });
+  }
+});
+
+app.get("/api/users/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(`SELECT * FROM users WHERE id = $1`, [id]);
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: "User Not found!",
+        data: {},
+      });
+    }
+
+    res.status(200).json({
+      message: "User retrived successfully!",
+      data: result.rows[0],
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      message: error.message,
+      error: error,
+    });
+  }
+});
+
+app.put("/api/users/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, password, age, is_active } = req.body;
+
+  // console.log("Id : ", id);
+  // console.log({ name, password, age, is_active });
+
+  try {
+    const result = await pool.query(
+      `
+    UPDATE users 
+    SET 
+    name=COALESCE($1,name),
+    password=COALESCE($2,password),
+    age=COALESCE($3,age),
+    is_active=COALESCE($4,is_active) 
+
+    WHERE id=$5 RETURNING *
+    `,
+      [name, password, age, is_active, id],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: "User Not found!",
+      });
+    }
+
+    // console.log(result);
+    res.status(200).json({
+      success: true,
+      message: "User updated successfully!",
+      data: result.rows[0],
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      error: error,
+    });
+  }
+});
+
+app.delete("/api/users/:id", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `
+    DELETE FROM users WHERE id=$1  
+      `,
+      [id],
+    );
+
+    console.log(result);
+    if (result.rowCount === 0) {
+      res.status(404).json({
+        success: false,
+        message: "User Not found!",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User deleted successfully!",
+      data: {},
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
       message: error.message,
       error: error,
     });
